@@ -1,9 +1,10 @@
 import { Router } from "express";
-import INITIAL_FRONTEND_DATA from "../../Data/cache_data.json";// assert { type: "json" };
-import INITIAL_SOLAR_CAR_DATA from "../../Data/dynamic_data.json";// assert { type: "json" };
-import DATA_FORMAT from "../../Data/sc1-data-format/format.json";// assert { type: "json" };
+import INITIAL_FRONTEND_DATA from "../../Data/cache_data.json";
+import INITIAL_SOLAR_CAR_DATA from "../../Data/dynamic_data.json";
+import DATA_FORMAT from "../../Data/sc1-data-format/format.json";
 import net from "net";
 import fetch from 'node-fetch';
+// TODO const { Client } = require("cassandra-driver"); // TODO For Cassandra
 
 const ROUTER = Router();
 let solarCarData = INITIAL_SOLAR_CAR_DATA,
@@ -17,6 +18,51 @@ ROUTER.get("/api", (req, res) => {
 });
 
 
+const clients = [];
+
+const server = net.createServer((socket) => {
+  console.log('Client connected');
+
+  clients.push(socket);
+
+  socket.on('data', (data) => {
+    console.log(`Received data: ${data}`);
+
+    // Distribute the received data to all connected clients
+    clients.forEach((client) => {
+      if (client !== socket && !client.destroyed) {
+        client.write(data);
+      }
+    });
+  });
+
+  socket.on('end', () => {
+    console.log('Client disconnected');
+
+    const index = clients.indexOf(socket);
+    if (index > -1) {
+      clients.splice(index, 1);
+    }
+  });
+});
+
+server.on('error', (err) => {
+  console.error(`Server error: ${err}`);
+});
+
+server.listen(4003, () => {
+  console.log('Server listening on port 4003');
+});
+
+function broadcastData(data) {
+  console.log("Broadcasting data")
+  clients.forEach((client) => {
+    if (!client.destroyed) {
+      console.log("writing data");
+      client.write(data);
+    }
+  });
+}
 //----------------------------------------------------- LTE ----------------------------------------------------------
 let interval;
 let tableName;
@@ -107,6 +153,7 @@ async function setupVPSInterface() {
             let i;
             for(i in rows) {
               console.log('\ttimestamp:', rows[i].timestamp, '\nBytes:', Buffer.from(rows[i].payload.data));
+              broadcastData(Buffer.from(rows[i].payload.data));
               unpackData(Buffer.from(rows[i].payload.data)); // TODO
             }
 
@@ -125,14 +172,114 @@ async function setupVPSInterface() {
         })
         .catch(function(error) {
           console.log('Request failed', error);
-          // Set fetchCount equal to successCount so that get-new-rows can still be fetched
 		  fetchCount = successCount;
+          // TODO Set fetchCount equal to successCount so that get-new-rows can still be fetched
         });
     }
   }, 250);
 }
 
 setupVPSInterface();
+
+/* TODO Remove
+let int2 = setInterval(() => {
+  console.log("INTERVAL GOOD");
+}, 10);*/
+
+
+
+
+/* TODO
+interval = setInterval(() => {
+  // TODO Is not using a database for this project
+
+  fetch(`http://host:port/get-new-rows/${latestTimestamp}`, {
+    method: 'GET',
+    headers: {
+      "Content-type": "application/json"
+    }
+  })
+    .then(function(response) {
+      return response.json();
+    })
+    .then(function(data) {
+      console.log("Getting new rows", data);
+
+      // Get the rows of timestamps and data from the response
+      let rows = data.response;
+
+      // Make sure there was at least 1 row returned
+      if(data.response.length > 0) {
+        // Iterate through the rows and print the timestamps and payloads
+        //                          and unpack the payloads
+        let i;
+        for(i in rows) {
+          console.log('\ttimestamp:', rows[i].timestamp, '\nBytes:', Buffer.from(rows[i].payload.data));
+          unpackData(Buffer.from(rows[i].payload.data)); // TODO
+        }
+
+        // Update the latest timestamp
+        latestTimestamp = rows[i].timestamp;
+      }
+
+      // TODO Gets the first item of the response
+      // console.log('Request succeeded with JSON response', data);
+      // TODO console.log('Count:', data.count, '\ttimestamp:', data.tStamp, '\nBytes:', Buffer.from(data.bytes.data));
+    })
+    .catch(function(error) {
+      console.log('Request failed', error);
+    });
+
+  /*fetch('cloud DB REST API', {
+    method: 'GET',
+    headers: {
+      "Content-type": "application/json"
+    }
+  })
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(data) {
+        // TODO Gets the first item of the response
+        console.log('Request succeeded with JSON response', data.items[0]);
+      })
+      .catch(function(error) {
+        console.log('Request failed', error);
+      });*/
+// TODO }, 250);
+
+
+/*
+const client = new Client({
+  cloud: {
+    secureConnectBundle: "./secure-connect-testingforbloop.zip",
+  },
+  credentials: {
+    username: "<<CLIENT ID>>",
+    password: "<<CLIENT SECRET>>",
+  },
+});
+
+async function run() {
+
+
+  await client.connect();
+
+  // Execute a query
+  //const rs = await client.execute("select counter from blooptests.table1 where session='sess5' order by tstamp desc, bytes desc, counter desc limit 1;");
+  //console.log('Your cluster returned', rs.rows[0].get("counter"));
+
+  //await client.shutdown();
+}
+
+async function execute() {
+  // Execute a query
+  const rs = await client.execute("select counter from blooptests.table1 where session='sess5' and tstamp='t' and bytes = '010101' and counter > 5000 order by counter desc limit 1;");
+  console.log('Your cluster returned', rs.rows[0].get("counter"));
+}
+
+// Run the async function
+run();*/
 
 
 
