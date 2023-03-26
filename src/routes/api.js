@@ -2,19 +2,31 @@ import { Router } from "express";
 import INITIAL_FRONTEND_DATA from "../../Data/cache_data.json";
 import INITIAL_SOLAR_CAR_DATA from "../../Data/dynamic_data.json";
 import DATA_FORMAT from "../../Data/sc1-data-format/format.json";
+import CONSTANTS from "../../constants.json";
 import net from "net";
 import fetch from 'node-fetch';
-// TODO const { Client } = require("cassandra-driver"); // TODO For Cassandra
 
 const ROUTER = Router();
-let solarCarData = INITIAL_SOLAR_CAR_DATA,
-  frontendData = INITIAL_FRONTEND_DATA;
+let solarCarData = INITIAL_SOLAR_CAR_DATA;
+let frontendData = INITIAL_FRONTEND_DATA;
+
+const NUM_BYTES_IDX = 0;
+const DATA_TYPE_IDX = 1;
+// The max number of data points to have in each array at one time
+// equivalent to 10 minutes' worth of data being sent 30 Hz
+const X_AXIS_CAP = CONSTANTS.X_AXIS_CAP;
+
+
+let bytesPerPacket = 0;
+for (const property in DATA_FORMAT) {
+  bytesPerPacket += DATA_FORMAT[property][NUM_BYTES_IDX];
+}
 
 // Send data to front-end
 ROUTER.get("/api", (req, res) => {
-  console.time("send http");
+  //console.time("send http");
   const temp = res.send({ response: frontendData }).status(200);
-  temp.addListener("finish", () => console.timeEnd("send http"));
+  //temp.addListener("finish", () => console.timeEnd("send http"));
 });
 
 
@@ -63,6 +75,9 @@ function broadcastData(data) {
     }
   });
 }
+
+
+
 //----------------------------------------------------- LTE ----------------------------------------------------------
 let interval;
 let tableName;
@@ -70,6 +85,8 @@ let latestTimestamp;
 // Counts for the total number of fetches and successes
 let fetchCount = 0;
 let successCount = 0;
+
+const MILLIS_PER_MIN = 60000;
 
 // TODO Wouldn't be a bad idea to add a simple/small frontend control for refreshing the latest table
 //      This would re-fetch newest-timestamp-table and update. This could be useful for avoiding having to restart the
@@ -108,7 +125,7 @@ async function setupVPSInterface() {
       // Get the first timestamp in the table (minus 1)
       latestTimestamp = data.response - 1;
       // Get millisecond timestamp from ten minutes ago
-      const tenMinutesEarlier = Date.now() - 600000; // TODO Good place to add SECONDS_PER_MINUTE and MILLIS_PER_SECOND
+      const tenMinutesEarlier = Date.now() - 10 * MILLIS_PER_MIN;
 
       // Set latestTimestamp to whichever is later: ten minutes ago or the first timestamp in the table (minus 1)
       latestTimestamp = (latestTimestamp >= tenMinutesEarlier) ? latestTimestamp : tenMinutesEarlier;
@@ -168,7 +185,7 @@ async function setupVPSInterface() {
 
           // TODO Gets the first item of the response
           // console.log('Request succeeded with JSON response', data);
-          // TODO console.log('Count:', data.count, '\ttimestamp:', data.tStamp, '\nBytes:', Buffer.from(data.bytes.data));
+          // console.log('Count:', data.count, '\ttimestamp:', data.tStamp, '\nBytes:', Buffer.from(data.bytes.data));
         })
         .catch(function(error) {
           console.log('Request failed', error);
@@ -181,124 +198,39 @@ async function setupVPSInterface() {
 
 setupVPSInterface();
 
-/* TODO Remove
-let int2 = setInterval(() => {
-  console.log("INTERVAL GOOD");
-}, 10);*/
-
-
-
-
-/* TODO
-interval = setInterval(() => {
-  // TODO Is not using a database for this project
-
-  fetch(`http://host:port/get-new-rows/${latestTimestamp}`, {
-    method: 'GET',
-    headers: {
-      "Content-type": "application/json"
-    }
-  })
-    .then(function(response) {
-      return response.json();
-    })
-    .then(function(data) {
-      console.log("Getting new rows", data);
-
-      // Get the rows of timestamps and data from the response
-      let rows = data.response;
-
-      // Make sure there was at least 1 row returned
-      if(data.response.length > 0) {
-        // Iterate through the rows and print the timestamps and payloads
-        //                          and unpack the payloads
-        let i;
-        for(i in rows) {
-          console.log('\ttimestamp:', rows[i].timestamp, '\nBytes:', Buffer.from(rows[i].payload.data));
-          unpackData(Buffer.from(rows[i].payload.data)); // TODO
-        }
-
-        // Update the latest timestamp
-        latestTimestamp = rows[i].timestamp;
-      }
-
-      // TODO Gets the first item of the response
-      // console.log('Request succeeded with JSON response', data);
-      // TODO console.log('Count:', data.count, '\ttimestamp:', data.tStamp, '\nBytes:', Buffer.from(data.bytes.data));
-    })
-    .catch(function(error) {
-      console.log('Request failed', error);
-    });
-
-  /*fetch('cloud DB REST API', {
-    method: 'GET',
-    headers: {
-      "Content-type": "application/json"
-    }
-  })
-      .then(function(response) {
-        return response.json();
-      })
-      .then(function(data) {
-        // TODO Gets the first item of the response
-        console.log('Request succeeded with JSON response', data.items[0]);
-      })
-      .catch(function(error) {
-        console.log('Request failed', error);
-      });*/
-// TODO }, 250);
-
-
-/*
-const client = new Client({
-  cloud: {
-    secureConnectBundle: "./secure-connect-testingforbloop.zip",
-  },
-  credentials: {
-    username: "<<CLIENT ID>>",
-    password: "<<CLIENT SECRET>>",
-  },
-});
-
-async function run() {
-
-
-  await client.connect();
-
-  // Execute a query
-  //const rs = await client.execute("select counter from blooptests.table1 where session='sess5' order by tstamp desc, bytes desc, counter desc limit 1;");
-  //console.log('Your cluster returned', rs.rows[0].get("counter"));
-
-  //await client.shutdown();
-}
-
-async function execute() {
-  // Execute a query
-  const rs = await client.execute("select counter from blooptests.table1 where session='sess5' and tstamp='t' and bytes = '010101' and counter > 5000 order by counter desc limit 1;");
-  console.log('Your cluster returned', rs.rows[0].get("counter"));
-}
-
-// Run the async function
-run();*/
-
 
 
 //----------------------------------------------------- TCP ----------------------------------------------------------
-const CAR_PORT = 4003; // Port for TCP connection
-const CAR_SERVER = "localhost"; // TCP server's IP address (Replace with pi's IP address to connect to pi)
+const CAR_PORT = CONSTANTS.CAR_PORT; // Port for TCP connection
+let CAR_ADDRESS; // TCP server's IP address (PI_ADDRESS to connect to pi; TEST_ADDRESS to connect to data generator)
 
-// The max number of data points to have in each array at one time
-// equivalent to 10 minutes' worth of data being sent 30 Hz
-const X_AXIS_CAP = 18_000;
+// Set CAR_ADDRESS according to the command used to start the backend
+if((process.argv.length === 3) && (process.argv.findIndex((val) => val === "dev") === 2)) {
+  // `npm start dev` was used. Connect to data generator
+  CAR_ADDRESS = CONSTANTS.TEST_ADDRESS;
+} else if(process.argv.length === 2) {
+  // `npm start` was used. Connect to the pi
+  CAR_ADDRESS = CONSTANTS.PI_ADDRESS;
+} else {
+  // An invalid command was used. Throw an error describing the usage
+  throw new Error('Invalid command. Correct usages:\n' +
+      '\t`npm start`: Use to connect the backend to the pi\n' +
+      '\t`npm run start-dev`: Use to connect the backend to the local data generator\n' +
+      '\t`npm start dev` (from Backend/ only): Same as `npm run start-dev`\n');
+}
+
+console.log('CAR_ADDRESS: ' + CAR_ADDRESS);
+
 
 /**
- * Creates a connection with the TCP server at port CAR_PORT and address CAR_SERVER. Then, sets listeners for connect,
+ * Creates a connection with the TCP server at port CAR_PORT and address CAR_ADDRESS. Then, sets listeners for connect,
  * data, close, and error events. In the event of an error, the client will attempt to re-open the socket at
  * regular intervals.
  */
-function openSocket() { /* TODO Uncomment
+function openSocket() {
   // Establish connection with server
-  var client = net.connect(CAR_PORT, CAR_SERVER); // TODO Add third parameter (timeout in ms) if we want to timeout due to inactivity
+  console.log('CAR_PORT: ' + CAR_PORT);
+  var client = net.connect(CAR_PORT, CAR_ADDRESS); // TODO Add third parameter (timeout in ms) if we want to timeout due to inactivity
   client.setKeepAlive(true);
 
   // Connection established listener
@@ -308,12 +240,13 @@ function openSocket() { /* TODO Uncomment
 
   // Data received listener
   client.on("data", (data) => {
-    // console.log(data);
-    // TODO In the way: console.time("update data");
-    unpackData(data);
-    // TODO In the way: console.timeEnd("update data");
-
-    //execute(); // TODO
+    if(data.length === bytesPerPacket) {
+      //console.time("update data");
+      unpackData(data);
+      //console.timeEnd("update data");
+    } else {
+      console.warn("ERROR: Bad packet length ------------------------------------");
+    }
   });
 
   // Socket closed listener
@@ -330,8 +263,7 @@ function openSocket() { /* TODO Uncomment
   // Socket error listener
   client.on("error", (err) => {
     // Log error
-    // TODO Getting in the way of logging response from server
-    // TODO console.log("Client errored out:", err);
+    console.log("Client errored out:", err);
 
     // Kill socket
     client.destroy();
@@ -345,8 +277,9 @@ function openSocket() { /* TODO Uncomment
 
     // Attempt to re-open socket
     setTimeout(openSocket, 1000);
-  });*/
+  });
 }
+
 
 /**
  * Unpacks a Buffer and updates the data to be passed to the front-end
@@ -358,9 +291,6 @@ function unpackData(data) {
   let timestamps = solarCarData["timestamps"]; // The array of timestamps for each set of data added to solarCarData
   // Array values indicate the status of the connection to the solar car. These will always be true when unpacking data
   let solar_car_connection = solarCarData["solar_car_connection"];
-
-  // Add the current timestamp to timestamps, limit its length, and update the array in solarCarData
-  // timestamps.unshift(DateTime.now().toString());
 
   // Add separators for timestamp to timestamps and limit array's length
   timestamps.unshift("::.");
@@ -380,7 +310,7 @@ function unpackData(data) {
     if (solarCarData.hasOwnProperty(property)) {
       dataArray = solarCarData[property];
     }
-    dataType = DATA_FORMAT[property][1];
+    dataType = DATA_FORMAT[property][DATA_TYPE_IDX];
 
     // Add the data from the buffer to solarCarData
     switch (dataType) {
@@ -406,15 +336,15 @@ function unpackData(data) {
           case "tstamp_mn":
             const mins = data.readUInt8(buffOffset);
             timestamps[0] = timestamps[0].replace(
-              "::",
-              ":" + (mins < 10 ? "0" + mins : mins) + ":"
+                "::",
+                ":" + (mins < 10 ? "0" + mins : mins) + ":"
             );
             break;
           case "tstamp_sc":
             const secs = data.readUInt8(buffOffset);
             timestamps[0] = timestamps[0].replace(
-              ":.",
-              ":" + (secs < 10 ? "0" + secs : secs) + "."
+                ":.",
+                ":" + (secs < 10 ? "0" + secs : secs) + "."
             );
             break;
           default:
@@ -436,7 +366,7 @@ function unpackData(data) {
           }
           if (typeof millisStr === "undefined") {
             console.warn(
-              `Millis value of ${millis} caused undefined millis value`
+                `Millis value of ${millis} caused undefined millis value`
             );
           }
 
@@ -449,7 +379,7 @@ function unpackData(data) {
       default:
         // Log if an unexpected type is specified in the data format
         console.log(
-          `No case for unpacking type ${dataType} (type specified for ${property} in format.json)`
+            `No case for unpacking type ${dataType} (type specified for ${property} in format.json)`
         );
         break;
     }
@@ -465,7 +395,7 @@ function unpackData(data) {
     }
 
     // Increment offset by amount specified in data format
-    buffOffset += DATA_FORMAT[property][0];
+    buffOffset += DATA_FORMAT[property][NUM_BYTES_IDX];
   }
 
   // Update the timestamps array in solarCarData
