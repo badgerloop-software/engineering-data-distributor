@@ -6,6 +6,13 @@ import CONSTANTS from "../../constants.json";
 import net from "net";
 import fetch from 'node-fetch';
 
+const readline = require('readline').createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
+
+readline.setPrompt('Enter \'r\' to refresh the table that\'s being queried: ');
+
 const ROUTER = Router();
 let solarCarData = INITIAL_SOLAR_CAR_DATA;
 let frontendData = INITIAL_FRONTEND_DATA;
@@ -33,7 +40,9 @@ ROUTER.get("/api", (req, res) => {
 const clients = [];
 
 const server = net.createServer((socket) => {
-  console.log('Client connected');
+  readline.pause();
+  console.log('\nClient connected');
+  readline.prompt(true);
 
   clients.push(socket);
 
@@ -67,10 +76,10 @@ server.listen(4003, () => {
 });
 
 function broadcastData(data) {
-  console.log("Broadcasting data")
+  //console.log("Broadcasting data")
   clients.forEach((client) => {
     if (!client.destroyed) {
-      console.log("writing data");
+      // TODO console.log("writing data");
       client.write(data);
     }
   });
@@ -88,13 +97,9 @@ let successCount = 0;
 
 const MILLIS_PER_MIN = 60000;
 
-// TODO Wouldn't be a bad idea to add a simple/small frontend control for refreshing the latest table
-//      This would re-fetch newest-timestamp-table and update. This could be useful for avoiding having to restart the
-//      backend every time the driver dashboard is restarted. It would also allow the engineering dashboard to be started
-//      before the driver dashboard because, if the driver dashboard hasn't started/created a new table yet, the backend
-//      will fetch the wrong table using newest-timestamp-table.
 
-async function setupVPSInterface() {
+async function getLatestTable() {
+  console.log("Retrieving the most recent table...");
   // Get most recently created table that has a timestamp for a name
   await fetch(`http://150.136.104.125:3000/newest-timestamp-table`, {
     method: 'GET',
@@ -109,6 +114,25 @@ async function setupVPSInterface() {
       tableName = data.response;
       console.log(`Got table name: ${tableName}`);
     });
+}
+
+
+function promptRefresh() {
+  readline.question(readline.getPrompt(), (input) => {
+    if(input === 'r') {
+      getLatestTable().then(() => {
+        promptRefresh();
+      });
+    } else {
+      promptRefresh();
+    }
+  });
+}
+
+
+async function setupVPSInterface() {
+  await getLatestTable();
+  promptRefresh();
 
   // Get the first timestamp from the table and subtract 1 so that it is included
   // in the first group of retrieved entries
@@ -129,23 +153,17 @@ async function setupVPSInterface() {
 
       // Set latestTimestamp to whichever is later: ten minutes ago or the first timestamp in the table (minus 1)
       latestTimestamp = (latestTimestamp >= tenMinutesEarlier) ? latestTimestamp : tenMinutesEarlier;
-      console.log(`Got latest timestamp: ${latestTimestamp}`);
+      //console.log(`Got latest timestamp: ${latestTimestamp}`);
     });
 
-  // Fetch the newest rows TODO at regular intervals
+  // Fetch the newest rows at regular intervals
   interval = setInterval(() => {
-    console.log(`Fetching http://150.136.104.125:3000/get-new-rows/${tableName}/${latestTimestamp}`);
-
-    // TODO Maybe put this in a while loop and use `await` instead of having this repeat at constant intervals.
-    //      I believe the constant 250ms intervals is what's causing the duplicate datasets: The backend fetches the
-    //      same url a second time before the first response is sent back
-    //      If a while loop with await fetch() repeats too quickly/blocks the rest of the backend (shouldn't block),
-    //      try to set up a *MINIMUM* interval of 250ms
+    //console.log(`Fetching http://150.136.104.125:3000/get-new-rows/${tableName}/${latestTimestamp}`);
 
     // Increment the total number of fetches
     fetchCount ++;
 
-    console.log("Fetch:",fetchCount,"\tSuccess:",successCount);
+    //console.log("Fetch:",fetchCount,"\tSuccess:",successCount);
 
     if(fetchCount === (successCount + 1)) {
       fetch(`http://150.136.104.125:3000/get-new-rows/${tableName}/${latestTimestamp}`, {
@@ -158,7 +176,7 @@ async function setupVPSInterface() {
           return response.json();
         })
         .then(function(data) {
-          console.log("Getting new rows", data);
+          //console.log("Getting new rows", data);
 
           // Get the rows of timestamps and data from the response
           let rows = data.response;
@@ -169,7 +187,7 @@ async function setupVPSInterface() {
             //                          and unpack the payloads
             let i;
             for(i in rows) {
-              console.log('\ttimestamp:', rows[i].timestamp, '\nBytes:', Buffer.from(rows[i].payload.data));
+              //console.log('\ttimestamp:', rows[i].timestamp, '\nBytes:', Buffer.from(rows[i].payload.data));
               broadcastData(Buffer.from(rows[i].payload.data));
               unpackData(Buffer.from(rows[i].payload.data)); // TODO
             }
@@ -188,9 +206,8 @@ async function setupVPSInterface() {
           // console.log('Count:', data.count, '\ttimestamp:', data.tStamp, '\nBytes:', Buffer.from(data.bytes.data));
         })
         .catch(function(error) {
-          console.log('Request failed', error);
+          //console.log('Request failed', error);
 		  fetchCount = successCount;
-          // TODO Set fetchCount equal to successCount so that get-new-rows can still be fetched
         });
     }
   }, 250);
@@ -219,8 +236,6 @@ if((process.argv.length === 3) && (process.argv.findIndex((val) => val === "dev"
       '\t`npm start dev` (from Backend/ only): Same as `npm run start-dev`\n');
 }
 
-console.log('CAR_ADDRESS: ' + CAR_ADDRESS);
-
 
 /**
  * Creates a connection with the TCP server at port CAR_PORT and address CAR_ADDRESS. Then, sets listeners for connect,
@@ -228,14 +243,17 @@ console.log('CAR_ADDRESS: ' + CAR_ADDRESS);
  * regular intervals.
  */
 function openSocket() {
+  readline.pause();
   // Establish connection with server
-  console.log('CAR_PORT: ' + CAR_PORT);
   var client = net.connect(CAR_PORT, CAR_ADDRESS); // TODO Add third parameter (timeout in ms) if we want to timeout due to inactivity
   client.setKeepAlive(true);
+  readline.prompt(true);
 
   // Connection established listener
   client.on("connect", () => {
-    console.log(`Connected to car server: ${client.remoteAddress}:${CAR_PORT}`);
+    readline.pause();
+    console.log(`\nConnected to car server: ${client.remoteAddress}:${CAR_PORT}`);
+    readline.prompt(true);
   });
 
   // Data received listener
@@ -245,7 +263,9 @@ function openSocket() {
       unpackData(data);
       //console.timeEnd("update data");
     } else {
-      console.warn("ERROR: Bad packet length ------------------------------------");
+      readline.pause();
+      console.warn("\nERROR: Bad packet length ------------------------------------");
+      readline.prompt(true);
     }
   });
 
@@ -257,13 +277,16 @@ function openSocket() {
       frontendData.solar_car_connection[0] = false;
     }
 
-    console.log(`Connection to car server (${CAR_PORT}) is closed`);
+    readline.pause();
+    console.log(`\nConnection to car server (${CAR_PORT}) is closed`);
+    readline.prompt(true);
   });
 
   // Socket error listener
   client.on("error", (err) => {
+    readline.pause();
     // Log error
-    console.log("Client errored out:", err);
+    console.log("\nClient errored out:", err);
 
     // Kill socket
     client.destroy();
