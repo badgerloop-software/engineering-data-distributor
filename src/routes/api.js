@@ -91,8 +91,8 @@ server.on('error', (err) => {
   console.error(`Server error: ${err}`);
 });
 
-server.listen(4003, () => {
-  console.log('Server listening on port 4003');
+server.listen(CONSTANTS.CAR_PORT, () => {
+  console.log(`Server listening on port ${CONSTANTS.CAR_PORT}`);
 });
 
 function broadcastData(data) {
