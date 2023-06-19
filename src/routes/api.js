@@ -260,6 +260,7 @@ function openSocket() {
   client.on("data", (data) => {
     if(data.length === bytesPerPacket) {
       //console.time("update data");
+      broadcastData(data);
       unpackData(data);
       //console.timeEnd("update data");
     } else {
