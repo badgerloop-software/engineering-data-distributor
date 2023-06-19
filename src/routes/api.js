@@ -6,6 +6,15 @@ import CONSTANTS from "../../constants.json";
 import net from "net";
 import fetch from 'node-fetch';
 
+
+function usageError() {
+  throw new Error('Invalid command. Correct usages:\n' +
+      '\t`npm start`: Use to connect the distribution server to the pi\n' +
+      '\t`npm start -- -d`: Use to connect the distribution server to a local instance of the sc1-driver-io app\n' +
+      '\t`npm start -- -i`: Use to run the distribution server on this computer alongside the engineering dashboard\n');
+}
+
+
 const readline = require('readline').createInterface({
   input: process.stdin,
   output: process.stdout
@@ -23,7 +32,6 @@ const DATA_TYPE_IDX = 1;
 // equivalent to 10 minutes' worth of data being sent 30 Hz
 const X_AXIS_CAP = CONSTANTS.X_AXIS_CAP;
 
-
 let bytesPerPacket = 0;
 for (const property in DATA_FORMAT) {
   bytesPerPacket += DATA_FORMAT[property][NUM_BYTES_IDX];
@@ -36,6 +44,39 @@ ROUTER.get("/api", (req, res) => {
   //temp.addListener("finish", () => console.timeEnd("send http"));
 });
 
+
+let DISTRIBUTION_PORT; // Port for TCP connection with engineering dashboard instance(s)
+let DISTRIBUTION_HOST; // TCP server's address for connection with engineering dashboard instance(s)
+let INCOMING_DATA_ADDRESS; // IP address of the TCP server that will be sending data to the distribution server
+
+// Set IP addresses and ports according to the command used to start the server
+if (process.argv.length === 3) {
+  switch(process.argv.at(2)) {
+    case "individual":
+      // `npm start -- -i` was used
+      DISTRIBUTION_HOST = CONSTANTS.LOCAL_HOST;
+      DISTRIBUTION_PORT = CONSTANTS.CAR_PORT;
+      INCOMING_DATA_ADDRESS = CONSTANTS.PI_ADDRESS;
+      break;
+    case "dev":
+      // `npm start -- -d` was used
+      DISTRIBUTION_HOST = CONSTANTS.LOCAL_HOST;
+      DISTRIBUTION_PORT = CONSTANTS.TEST_PORT;
+      INCOMING_DATA_ADDRESS = CONSTANTS.LOCAL_HOST;
+      break;
+    default:
+      // An invalid option was given. Throw an error describing the usage
+      usageError();
+  }
+} else if (process.argv.length === 2) {
+  // `npm start` was used
+  DISTRIBUTION_HOST = CONSTANTS.LAN_HOST;
+  DISTRIBUTION_PORT = CONSTANTS.CAR_PORT;
+  INCOMING_DATA_ADDRESS = CONSTANTS.PI_ADDRESS;
+} else {
+  // An invalid command was used. Throw an error describing the usage
+  usageError();
+}
 
 const clients = [];
 
@@ -91,8 +132,9 @@ server.on('error', (err) => {
   console.error(`Server error: ${err}`);
 });
 
-server.listen(CONSTANTS.CAR_PORT, () => {
-  console.log(`Server listening on port ${CONSTANTS.CAR_PORT}`);
+// Start listening for incoming connections from engineering dashboard instances
+server.listen(DISTRIBUTION_PORT, DISTRIBUTION_HOST, () => {
+  console.log(`Server listening on ${DISTRIBUTION_HOST}:${DISTRIBUTION_PORT}`);
 });
 
 function broadcastData(data) {
@@ -238,7 +280,7 @@ setupVPSInterface();
 
 
 //----------------------------------------------------- TCP ----------------------------------------------------------
-const CAR_PORT = CONSTANTS.CAR_PORT; // Port for TCP connection
+/*const CAR_PORT = CONSTANTS.CAR_PORT; // Port for TCP connection
 let CAR_ADDRESS; // TCP server's IP address (PI_ADDRESS to connect to pi; TEST_ADDRESS to connect to data generator)
 
 // Set CAR_ADDRESS according to the command used to start the backend
@@ -254,25 +296,25 @@ if((process.argv.length === 3) && (process.argv.findIndex((val) => val === "dev"
       '\t`npm start`: Use to connect the backend to the pi\n' +
       '\t`npm run start-dev`: Use to connect the backend to the local data generator\n' +
       '\t`npm start dev` (from Backend/ only): Same as `npm run start-dev`\n');
-}
+}*/
 
 
 /**
- * Creates a connection with the TCP server at port CAR_PORT and address CAR_ADDRESS. Then, sets listeners for connect,
- * data, close, and error events. In the event of an error, the client will attempt to re-open the socket at
- * regular intervals.
+ * Creates a connection with the TCP server at port CONSTANTS.CAR_PORT and address INCOMING_DATA_ADDRESS. Then, sets
+ * listeners for connect, data, close, and error events. In the event of an error, the client will attempt to re-open
+ * the socket at regular intervals.
  */
 function openSocket() {
   readline.pause();
   // Establish connection with server
-  var client = net.connect(CAR_PORT, CAR_ADDRESS); // TODO Add third parameter (timeout in ms) if we want to timeout due to inactivity
+  var client = net.connect(CONSTANTS.CAR_PORT, INCOMING_DATA_ADDRESS); // TODO Add third parameter (timeout in ms) if we want to timeout due to inactivity
   client.setKeepAlive(true);
   readline.prompt(true);
 
   // Connection established listener
   client.on("connect", () => {
     readline.pause();
-    console.log(`\nConnected to car server: ${client.remoteAddress}:${CAR_PORT}`);
+    console.log(`\nConnected to car server: ${client.remoteAddress}:${CONSTANTS.CAR_PORT}`);
     readline.prompt(true);
   });
 
@@ -299,7 +341,7 @@ function openSocket() {
     }
 
     readline.pause();
-    console.log(`\nConnection to car server (${CAR_PORT}) is closed`);
+    console.log(`\nConnection to car server (${INCOMING_DATA_ADDRESS}:${CONSTANTS.CAR_PORT}) is closed`);
     readline.prompt(true);
   });
 

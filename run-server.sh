@@ -1,5 +1,17 @@
 #!/bin/bash
 
+
+# _enforce_one_configuration: Checks if a configuration was already specified. Called when the -d/--dev and
+#                             -i/--individual options are specified.
+_enforce_one_configuration() {
+  # If a configuration was already specified, print an error message and exit
+  if [[ -n $config ]]; then
+    echo -e "\n\033[1;31m[ERROR] More than one configuration specified.\033[0m\n" >&2
+    exit 1
+  fi
+}
+
+
 while [[ "$1" =~ ^- && ! "$1" == "--" ]]; do case $1 in
   -s | --submodule-commit )
     # Check that a commit was provided
@@ -10,8 +22,16 @@ while [[ "$1" =~ ^- && ! "$1" == "--" ]]; do case $1 in
     shift; commit=$1
     ;;
   -d | --dev )
+    # Ensure that only one configuration is specified
+    _enforce_one_configuration
     # Use the 'dev' configuration
     config='dev'
+    ;;
+  -i | --individual )
+    # Ensure that only one configuration is specified
+    _enforce_one_configuration
+    # Use the 'individual' configuration
+    config='individual'
     ;;
   * )
     echo -e "\n\033[1;31m[ERROR] Invalid option: $1\033[0m\n" >&2
