@@ -3,7 +3,7 @@ import { createServer } from "http";
 import index from "./routes/api.js";
 import CONSTANTS from "../constants.json";
 
-const PORT = CONSTANTS.PORT;
+const PORT = CONSTANTS.SERVER_PORT;
 const APP = express();
 APP.use(index);
 

@@ -1,7 +1,9 @@
 {
-    "CAR_PORT": 4003,
-    "TEST_ADDRESS": "localhost",
-    "PI_ADDRESS": "192.168.1.15",
+    "LOCAL_HOST": "localhost",
+    "LAN_HOST": "192.168.1.15",
+    "PI_ADDRESS": "192.168.1.17",
     "X_AXIS_CAP": 18000,
-    "PORT": 4002
+    "SERVER_PORT": 4002,
+    "CAR_PORT": 4003,
+    "TEST_PORT": 4004
 }
