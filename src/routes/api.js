@@ -312,14 +312,48 @@ function openSocket() {
     readline.prompt(true);
   });
 
+  let partialData = '';
   // Data received listener
   client.on("data", (data) => {
-    if(data.length === bytesPerPacket) {
-      broadcastData(data);
+    // Combine the new data with any previously received partial data
+    partialData += data.toString('latin1');
+
+    let startIndex = partialData.indexOf("<bl>");
+    let endIndex = partialData.indexOf("</bl>");
+
+    // Check if the packet is the size of a nominal payload without <bl></bl>
+    // If so, assume it is a nominal packet without <bl></bl> and broadcast it as is
+    if (partialData.length === bytesPerPacket) {
+      broadcastData(Buffer.from(partialData,'latin1'));
+      partialData = '';
     } else {
-      readline.pause();
-      console.warn("\nERROR: Bad packet length ------------------------------------");
-      readline.prompt(true);
+      while (startIndex !== -1 && endIndex !== -1) {
+        // Extract a complete data packet, this is different from chase car dashboard since we want to include the <br></br>
+        const complete_packet = Buffer.from(partialData.slice(startIndex, endIndex + 5),'latin1');
+
+        // Process the complete data packet
+        if (complete_packet.length === (bytesPerPacket + 9)) {
+          broadcastData(complete_packet);
+        } else {
+          readline.pause();
+          console.warn("ERROR: Bad packet length ------------------------------------");
+          readline.prompt(true);
+        }
+        // Update the partial data to exclude the processed packet
+        partialData = partialData.substring(endIndex + 5);
+        // Search for the next complete data packet
+        startIndex = partialData.indexOf("<bl>");
+        endIndex = partialData.indexOf("</bl>");
+      }
+
+      // If the remaining data is as long as or longer than the expected packet length,
+      // there might be a malformed packet, so log a warning.
+      if (partialData.length >= (bytesPerPacket + 9)) {
+        readline.pause();
+        console.warn("ERROR: Malformed packet ------------------------------------");
+        readline.prompt(true);
+        partialData = '';
+      }
     }
   });
 
