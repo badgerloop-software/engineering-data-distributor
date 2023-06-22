@@ -249,6 +249,44 @@ setupVPSInterface();
 
 
 //----------------------------------------------------- TCP ----------------------------------------------------------
+// Open port CONSTANTS.CONNECTION_CHECK_PORT on CONSTANTS.CONNECTION_CHECK_HOST for checking the status of the TCP
+// connection to the solar car
+const pingPort = net.createServer((socket) => {
+  function exit() {
+    if(!socket.destroyed) {
+      socket.destroy();
+    }
+  }
+
+  // Error, connection closed, and connection ended listeners
+  socket.on("error", (error) => {
+    exit();
+  });
+
+  socket.on("close", (close) => {
+    exit();
+  });
+
+  socket.on("end", () => {
+    exit();
+  });
+});
+
+pingPort.on('error', (err) => {
+  readline.pause();
+  console.error(`\nSolar car connection checking server error: ${err}`);
+  readline.prompt(true);
+});
+
+// Start listening for incoming connections from the solar car
+pingPort.listen(CONSTANTS.CONNECTION_CHECK_PORT, CONSTANTS.CONNECTION_CHECK_HOST, () => {
+  readline.pause();
+  console.log('\nSolar car connection checking server listening on ' +
+              `${CONSTANTS.CONNECTION_CHECK_HOST}:${CONSTANTS.CONNECTION_CHECK_PORT}`);
+  readline.prompt(true);
+});
+
+
 /**
  * Creates a connection with the TCP server at port CONSTANTS.CAR_PORT and address INCOMING_DATA_ADDRESS. Then, sets
  * listeners for connect, data, close, and error events. In the event of an error, the client will attempt to re-open
