@@ -1,9 +1,11 @@
 {
     "LOCAL_HOST": "localhost",
     "LAN_HOST": "192.168.1.15",
+    "CONNECTION_CHECK_HOST": "192.168.1.16",
     "PI_ADDRESS": "192.168.1.17",
     "X_AXIS_CAP": 18000,
     "SERVER_PORT": 4002,
     "CAR_PORT": 4003,
-    "TEST_PORT": 4004
+    "TEST_PORT": 4004,
+    "CONNECTION_CHECK_PORT": 4005
 }
