@@ -1,4 +1,4 @@
-[submodule "Data/sc1-data-format"]
-	path = Data/sc1-data-format
+[submodule "sc1-data-format"]
+	path = sc1-data-format
 	url = git@github.com:badgerloop-software/sc1-data-format.git
 	branch = main
