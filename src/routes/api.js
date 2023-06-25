@@ -46,24 +46,44 @@ const server = net.createServer((socket) => {
 
   clients.push(socket);
 
-  socket.on('data', (data) => {
-    console.log(`Received data: ${data}`);
-
-    // Distribute the received data to all connected clients
-    clients.forEach((client) => {
-      if (client !== socket && !client.destroyed) {
-        client.write(data);
-      }
-    });
-  });
-
-  socket.on('end', () => {
-    console.log('Client disconnected');
-
+  function exit() {
     const index = clients.indexOf(socket);
+
     if (index > -1) {
       clients.splice(index, 1);
+      console.log("Client removed from list");
+    } else {
+      console.log("Client has already been removed");
     }
+
+    if(!socket.destroyed) {
+      socket.destroy();
+      console.log("Socket successfully destroyed");
+    } else {
+      console.log("Socket has already been destroyed");
+    }
+  }
+
+  // Error, connection closed, and connection ended listeners
+  socket.on("error", (error) => {
+    readline.pause();
+    console.warn("\nSocket errored", error);
+    exit();
+    readline.prompt(true);
+  });
+
+  socket.on("close", (close) => {
+    readline.pause();
+    console.warn("\nSocket closed", close);
+    exit();
+    readline.prompt(true);
+  });
+
+  socket.on("end", () => {
+    readline.pause();
+    console.warn("\nClient disconnected (socket ended)");
+    exit();
+    readline.prompt(true);
   });
 });
 
