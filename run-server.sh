@@ -42,7 +42,7 @@ if [[ "$1" == '--' ]]; then shift; fi
 
 # If a submodule commit was specified, checkout that commit within the sc1-data-format submodule
 if [[ -n "$commit" ]]; then
-  cd Data/sc1-data-format
+  cd sc1-data-format
 
   # Check if the commit hash provided is valid. If it is, checkout that commit
   if [[ $(git cat-file -t $commit 2>/dev/null) == "commit" ]]; then
@@ -53,7 +53,7 @@ if [[ -n "$commit" ]]; then
     echo -e "\nCould not find submodule commit $commit\n" 1>&2
   fi
 
-  cd ../..
+  cd ..
 fi
 
 # Run the application with the specified configuration, if applicable
