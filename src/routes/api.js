@@ -295,9 +295,15 @@ pingPort.listen(CONSTANTS.CONNECTION_CHECK_PORT, CONSTANTS.CONNECTION_CHECK_HOST
 function openSocket() {
   readline.pause();
   // Establish connection with server
-  var client = net.connect(CONSTANTS.CAR_PORT, INCOMING_DATA_ADDRESS); // TODO Add third parameter (timeout in ms) if we want to timeout due to inactivity
+  var client = net.connect(CONSTANTS.CAR_PORT, INCOMING_DATA_ADDRESS);
   client.setKeepAlive(true);
   readline.prompt(true);
+
+  // Set a timeout for the connection due to inactivity
+  client.setTimeout(4000, () => {
+    // Emit a close event to close the connection on our end
+    client.emit("close");
+  });
 
   // Connection established listener
   client.on("connect", () => {
@@ -318,28 +324,27 @@ function openSocket() {
   });
 
   // Socket closed listener
-  client.on("close", function () {
+  client.once("close", function () {
     // TODO Set solar_car_connection to false for engineering dashboards if cellular connection is also gone
-
-    readline.pause();
-    console.log(`\nConnection to car server (${INCOMING_DATA_ADDRESS}:${CONSTANTS.CAR_PORT}) is closed`);
-    readline.prompt(true);
-  });
-
-  // Socket error listener
-  client.on("error", (err) => {
-    readline.pause();
-    // Log error
-    console.log("\nClient errored out:", err);
 
     // Kill socket
     client.destroy();
     client.unref();
 
-    // TODO Set solar_car_connection for engineering dashboards if cellular connection is also gone
+    readline.pause();
+    console.log(`\nConnection to car server (${INCOMING_DATA_ADDRESS}:${CONSTANTS.CAR_PORT}) is closed`);
+    readline.prompt(true);
 
     // Attempt to re-open socket
     setTimeout(openSocket, 1000);
+  });
+
+  // Socket error listener
+  client.once("error", (err) => {
+    // Only pause user input because the "close" event will follow this
+    readline.pause();
+    // Log error
+    console.log("\nClient errored out:", err);
   });
 }
 
