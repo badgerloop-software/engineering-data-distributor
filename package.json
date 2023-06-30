@@ -1,6 +1,6 @@
 {
   "name": "engineering-data-distributor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Server to distribute incoming packets from Solar Car 1 to engineering dashboard instances.",
   "main": "src/server.js",
   "repository": {
