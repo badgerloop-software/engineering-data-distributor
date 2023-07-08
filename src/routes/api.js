@@ -168,6 +168,8 @@ function promptRefresh() {
       getLatestTable().then(() => {
         promptRefresh();
       });
+    } else if(input.length === 13) {
+      tableName = '_' + input;
     } else {
       promptRefresh();
     }
@@ -224,6 +226,7 @@ async function setupVPSInterface() {
             // Iterate through the rows and print the timestamps and payloads and unpack the payloads
             let i;
             for(i in rows) {
+              console.log(Buffer.from(rows[i].payload.data));
               broadcastData(Buffer.from(rows[i].payload.data));
             }
 
